@@ -142,16 +142,31 @@ export class HandAnalyzer {
       const thumbTip = mirroredAt(HAND.thumbTip);
       const indexTip = mirroredAt(HAND.indexTip);
       const middleTip = mirroredAt(HAND.middleTip);
+      const indexPip = mirroredAt(HAND.indexPip);
+      const middlePip = mirroredAt(HAND.middlePip);
       const indexMcp = mirroredAt(HAND.indexMcp);
       const middleMcp = mirroredAt(HAND.middleMcp);
       const palmSize = Math.max(0.001, distance(wrist, middleMcp), distance(indexMcp, mirroredAt(HAND.pinkyMcp)));
       const pinchDistance = distance(thumbTip, indexTip) / palmSize;
-      const indexExtended = distance(indexTip, wrist) > distance(mirroredAt(HAND.indexPip), wrist) * 1.12;
-      const middleExtended = distance(middleTip, wrist) > distance(mirroredAt(HAND.middlePip), wrist) * 1.1;
+      const indexExtended = distance(indexTip, wrist) > distance(indexPip, wrist) * 1.12;
+      const middleExtended = distance(middleTip, wrist) > distance(middlePip, wrist) * 1.1;
       const fingerSeparation = distance(indexTip, middleTip) / palmSize;
       const fingerHold = indexExtended && middleExtended && fingerSeparation > 0.12 && fingerSeparation < 0.52;
       const state = pinchDistance < 0.29 ? "PINCH" : fingerHold ? "INDEX_MIDDLE_HOLD" : "NONE";
-      const gripPoint = state === "INDEX_MIDDLE_HOLD" ? midpoint(indexTip, middleTip) : midpoint(thumbTip, indexTip);
+
+      const dirX = (indexTip.x - indexMcp.x) + (middleTip.x - middleMcp.x);
+      const dirY = (indexTip.y - indexMcp.y) + (middleTip.y - middleMcp.y);
+      const dirLen = Math.hypot(dirX, dirY) || 1;
+      const fingerDirection: Point3 = { x: dirX / dirLen, y: dirY / dirLen, z: 0 };
+      const handAngle = Math.atan2(dirY, dirX);
+      const palmCenter = midpoint(wrist, middleMcp);
+
+      const interFingerBase = midpoint(indexPip, middlePip);
+      const interFingerTip = midpoint(indexTip, middleTip);
+      const fingerGrip = lerpPoint(interFingerBase, interFingerTip, 0.45);
+      const pinchGrip = midpoint(thumbTip, indexTip);
+      const gripPoint = state === "INDEX_MIDDLE_HOLD" ? fingerGrip : pinchGrip;
+
       return {
         id,
         visible: true,
@@ -162,6 +177,10 @@ export class HandAnalyzer {
         gripPoint,
         indexTip,
         middleTip,
+        fingerDirection,
+        palmCenter,
+        wrist,
+        handAngle,
       } satisfies HandAnalysis;
     });
   }

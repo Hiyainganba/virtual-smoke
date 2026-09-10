@@ -134,9 +134,25 @@ export class InteractionEngine {
       }
 
       this.handLostAt = 0;
-      this.snapshot.cigarettePosition = lerpPoint(this.snapshot.cigarettePosition, hand.gripPoint, smoothing);
-      const rawRotation = Math.atan2(hand.middleTip.y - hand.indexTip.y, hand.middleTip.x - hand.indexTip.x) - Math.PI / 2;
+      let rawRotation: number;
+      if (hand.fingerDirection) {
+        // Ember points in the direction of the fingers (with slight natural slant)
+        const slant = hand.state === "INDEX_MIDDLE_HOLD" ? 0.08 : 0;
+        rawRotation = Math.atan2(-hand.fingerDirection.y, -hand.fingerDirection.x) + slant;
+      } else {
+        rawRotation = Math.atan2(hand.middleTip.y - hand.indexTip.y, hand.middleTip.x - hand.indexTip.x) - Math.PI / 2;
+      }
       this.snapshot.cigaretteRotation = lerp(this.snapshot.cigaretteRotation, rawRotation, expSmoothing(dt, 24));
+
+      // Seat the orange filter end naturally in the fingers rather than placing the center inside the hand
+      const filterLead = this.snapshot.cigaretteLength * 0.28;
+      const targetPos: Point3 = {
+        x: hand.gripPoint.x - Math.cos(this.snapshot.cigaretteRotation) * filterLead,
+        y: hand.gripPoint.y - Math.sin(this.snapshot.cigaretteRotation) * filterLead,
+        z: 0,
+      };
+      this.snapshot.cigarettePosition = lerpPoint(this.snapshot.cigarettePosition, targetPos, smoothing);
+      this.snapshot.handSmokeActive = true;
 
       if (hand.state === "NONE") {
         this.releaseStartedAt ||= now;

@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { useInteractionStore } from "./store";
-import type { FaceAnalysis, InteractionSnapshot, Point3, SmokeEmission } from "./types";
+import type { FaceAnalysis, InteractionSnapshot, Point3, SmokeEmission, WineSnapshot } from "./types";
+import { WineGlassView } from "./wine-glass";
 
 const MAX_PARTICLES = 8000;
 const SMOKE_VOLUME_MULTIPLIER = 5;
@@ -136,6 +137,8 @@ export class SmokeRenderer {
   private cropY = 0;
   private baseSmokeAccumulator = 0;
   private quality: Quality = "HIGH";
+  private wineGlass = new WineGlassView();
+  private lastEmberOrigin: Point3 = { x: 0.5, y: 0.5, z: 0 };
   private lowFpsDuration = 0;
   private recoveryDuration = 0;
   private mouthParticleCount = 0;
@@ -171,11 +174,13 @@ export class SmokeRenderer {
     });
     this.cigarette.frustumCulled = false;
     this.scene.add(this.cigarette);
+    this.scene.add(this.wineGlass.group);
 
     this.lipMask = new THREE.Mesh(
       new THREE.CircleGeometry(0.5, 28),
       new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: true, depthTest: true, side: THREE.DoubleSide }),
     );
+
     this.lipMask.position.z = 0.22;
     this.lipMask.renderOrder = 1;
     this.lipMask.visible = false;
@@ -325,10 +330,14 @@ export class SmokeRenderer {
     }
   }
 
-  update(snapshot: InteractionSnapshot, face: FaceAnalysis, now: number, dt: number, fps: number) {
+  update(snapshot: InteractionSnapshot, face: FaceAnalysis, now: number, dt: number, fps: number, wineSnapshot?: WineSnapshot) {
     const time = now / 1000;
     this.particleMaterial.uniforms.uTime.value = time;
     this.updatePerformanceQuality(fps, dt);
+
+    const expMode = useInteractionStore.getState().experienceMode;
+    const showCigarette = expMode !== "WINE";
+    this.cigarette.visible = showCigarette;
 
     const mapped = this.mapPoint(snapshot.cigarettePosition);
     const mappedLength = this.mapLength(snapshot.cigaretteLength);
@@ -340,14 +349,16 @@ export class SmokeRenderer {
     // Only convert normalized X units to normalized Y units here; applying 0.1
     // again made the cigarette just 2–3 physical pixels thick.
     this.cigarette.scale.set(mappedLength, mappedBaseLength * (this.width / this.height) * 1.15, 1);
-    const burning = snapshot.smokingState === "INHALING";
+    const isHandHolding = (snapshot.cigaretteState === "HAND_HELD" || snapshot.cigaretteState === "FINGER_HELD" || Boolean(snapshot.handSmokeActive)) && snapshot.cigaretteState !== "FALLING";
+    const inhaling = snapshot.smokingState === "INHALING";
+    const burning = (inhaling || isHandHolding) && showCigarette;
     const flicker = 0.9 + Math.sin(now * 0.013) * 0.08 + Math.sin(now * 0.037) * 0.035;
     this.ember.scale.setScalar(flicker);
-    this.ember.material.color.setHex(burning ? 0xff4b1f : 0x665f59);
+    this.ember.material.color.setHex(inhaling ? 0xff4b1f : (isHandHolding ? 0xee5a28 : 0x665f59));
     this.glow.scale.setScalar(0.92 + Math.sin(now * 0.009) * 0.08);
-    this.glow.material.opacity = burning ? 0.34 : 0.025;
+    this.glow.material.opacity = inhaling ? 0.34 : (isHandHolding ? 0.16 : 0.025);
 
-    const mouthAttached = snapshot.cigaretteMouthSide !== null && (face.visible || face.inGracePeriod);
+    const mouthAttached = snapshot.cigaretteMouthSide !== null && (face.visible || face.inGracePeriod) && showCigarette;
     this.lipMask.visible = mouthAttached;
     if (mouthAttached) {
       const mouth = this.mapPoint(face.mouthCenter);
@@ -365,13 +376,30 @@ export class SmokeRenderer {
     const emberOrigin = this.mapPoint(emberVideo);
     this.baseSmokeAccumulator = burning ? this.baseSmokeAccumulator + dt * 60 * this.qualityFactor() : 0;
     let spawnedTipSmoke = false;
+    const handVelX = (emberOrigin.x - this.lastEmberOrigin.x) / Math.max(0.001, dt);
+    const handVelY = (emberOrigin.y - this.lastEmberOrigin.y) / Math.max(0.001, dt);
+    this.lastEmberOrigin = { ...emberOrigin };
+    const dragX = Math.max(-0.03, Math.min(0.03, handVelX * 0.1));
+    const dragY = Math.max(-0.03, Math.min(0.03, handVelY * 0.08));
+
     while (this.baseSmokeAccumulator >= 1) {
       this.baseSmokeAccumulator -= 1;
       this.baseSmokeParticleCount += 1;
-      this.spawn(emberOrigin, { x: (Math.random() - 0.5) * 0.016, y: -0.016 - Math.random() * 0.018, z: 0 }, 0, 4 + Math.random() * 2, 18 + Math.random() * 15);
+      this.spawn(emberOrigin, { x: dragX + (Math.random() - 0.5) * 0.016, y: -0.016 - Math.random() * 0.018 + dragY, z: 0 }, 0, 4 + Math.random() * 2, 18 + Math.random() * 15);
       spawnedTipSmoke = true;
     }
     if (spawnedTipSmoke) this.markParticlesDirty();
+
+    if (wineSnapshot) {
+      const showWine = expMode !== "CIGARETTE";
+      wineSnapshot.glassVisible = showWine;
+      const mappedWine = this.mapPoint(wineSnapshot.glassPosition);
+      const mappedWineScale = this.mapLength(wineSnapshot.glassScale);
+      this.wineGlass.update(wineSnapshot, mappedWine, mappedWineScale, this.width / this.height, now);
+    } else {
+      this.wineGlass.group.visible = false;
+    }
+
 
     this.renderer.render(this.scene, this.camera);
     if (useInteractionStore.getState().debugMode && now - this.lastParticleDebugUpdate >= 250) {

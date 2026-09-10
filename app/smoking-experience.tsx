@@ -8,12 +8,21 @@ import { SmokeRenderer } from "./lib/smoke-renderer";
 import { useInteractionStore } from "./lib/store";
 import type { FaceAnalysis, HandAnalysis, TrackingFrame } from "./lib/types";
 import { VisionTracker } from "./lib/vision-tracker";
+import { WineEngine } from "./lib/wine-engine";
 
 export function SmokingExperience() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const renderCanvasRef = useRef<HTMLCanvasElement>(null);
   const debugCanvasRef = useRef<HTMLCanvasElement>(null);
   const [cameraState, setCameraState] = useState<"loading" | "ready" | "denied">("loading");
+
+  const experienceMode = useInteractionStore((s) => s.experienceMode);
+  const setExperienceMode = useInteractionStore((s) => s.setExperienceMode);
+  const wineLevel = useInteractionStore((s) => s.wineLevel);
+  const isSippingWine = useInteractionStore((s) => s.isSippingWine);
+  const wineGlassHeld = useInteractionStore((s) => s.wineGlassHeld);
+  const cigaretteState = useInteractionStore((s) => s.cigaretteState);
+  const refillWine = useInteractionStore((s) => s.refillWine);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -25,6 +34,7 @@ export function SmokingExperience() {
     let tracker: VisionTracker | undefined;
     let visual: SmokeRenderer | undefined;
     let engine: InteractionEngine | undefined;
+    const wineEngine = new WineEngine();
     let animationFrame = 0;
     let videoFrameCallback = 0;
     let trackingFallbackFrame = 0;
@@ -48,12 +58,23 @@ export function SmokingExperience() {
     let faceInferenceMs = 0;
     const frameTimes: number[] = [];
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() !== "d" || event.repeat) return;
+      if (event.repeat) return;
+      const key = event.key.toLowerCase();
       const store = useInteractionStore.getState();
-      const wasEnabled = store.debugMode;
-      store.toggleDebug();
-      if (wasEnabled) debugCanvas.getContext("2d")?.clearRect(0, 0, debugCanvas.width, debugCanvas.height);
+      if (key === "d") {
+        const wasEnabled = store.debugMode;
+        store.toggleDebug();
+        if (wasEnabled) debugCanvas.getContext("2d")?.clearRect(0, 0, debugCanvas.width, debugCanvas.height);
+      } else if (key === "c") {
+        store.setExperienceMode("CIGARETTE");
+      } else if (key === "w") {
+        store.setExperienceMode("WINE");
+      } else if (key === "r") {
+        wineEngine.refill();
+        store.refillWine();
+      }
     };
+
 
     const resize = () => visual?.resize(
       window.innerWidth,
@@ -145,7 +166,8 @@ export function SmokingExperience() {
       }
 
       const snapshot = engine.update(face, hands, now, dt, delegate);
-      visual.update(snapshot, face, now, dt, fps);
+      const wineSnapshot = wineEngine.update(face, hands, now, dt);
+      visual.update(snapshot, face, now, dt, fps, wineSnapshot);
       if (appliedThisFrame) inputLatencyMs = Math.max(0, performance.now() - appliedThisFrame.sourceTimestamp);
 
       const debugMode = useInteractionStore.getState().debugMode;
@@ -256,6 +278,57 @@ export function SmokingExperience() {
       <video ref={videoRef} className="camera" aria-label="Mirrored webcam view" autoPlay muted playsInline />
       <canvas ref={renderCanvasRef} className="render-canvas" aria-hidden="true" />
       <canvas ref={debugCanvasRef} className="debug-canvas" aria-hidden="true" />
+
+      <nav className="ar-control-bar" role="toolbar" aria-label="AR Experience Controls">
+        <div className="ar-mode-tabs">
+          <button
+            type="button"
+            className={`ar-mode-btn mode-cigarette ${experienceMode === "CIGARETTE" ? "active" : ""}`}
+            onClick={() => setExperienceMode("CIGARETTE")}
+            title="Switch to Cigarette (Press C)"
+          >
+            <span className="ar-icon">🚬</span>
+            <span>Cigarette</span>
+          </button>
+          <button
+            type="button"
+            className={`ar-mode-btn mode-wine ${experienceMode === "WINE" ? "active" : ""}`}
+            onClick={() => setExperienceMode("WINE")}
+            title="Switch to Red Wine (Press W)"
+          >
+            <span className="ar-icon">🍷</span>
+            <span>Red Wine</span>
+          </button>
+        </div>
+
+        {experienceMode === "WINE" && (
+          <div className="ar-wine-actions">
+            <button
+              type="button"
+              className="ar-refill-btn"
+              onClick={refillWine}
+              title="Refill Glass (Press R)"
+            >
+              🍾 Refill ({Math.round(wineLevel * 100)}%)
+            </button>
+          </div>
+        )}
+
+        <div className={`ar-hint-badge ${isSippingWine ? "sipping" : ""}`} aria-live="polite">
+          {experienceMode === "CIGARETTE" ? (
+            cigaretteState === "HAND_HELD" || cigaretteState === "FINGER_HELD"
+              ? "✨ Holding cigarette • Moving hand leaves rising smoke trail"
+              : "✋ Bring hand near cigarette to hold between fingers"
+          ) : isSippingWine ? (
+            "🍷 Sipping fine red wine..."
+          ) : wineGlassHeld ? (
+            "🍷 Holding wine glass • Tilt near mouth to sip"
+          ) : (
+            "✋ Show hand to hold wine glass by stem or bowl"
+          )}
+        </div>
+      </nav>
+
       <p className="sr-only" aria-live="polite">
         {cameraState === "ready" ? "Virtual cigarette interaction is active." : cameraState === "denied" ? "Camera access is required." : "Preparing camera."}
       </p>

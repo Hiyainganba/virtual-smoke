@@ -1,8 +1,12 @@
 import { create } from "zustand";
-import type { CigaretteState, HandState, MouthState, SmokingState } from "./types";
+import type { ActiveExperienceMode, CigaretteState, HandState, MouthState, SmokingState } from "./types";
 
 export interface RuntimeDebugState {
   debugMode: boolean;
+  experienceMode: ActiveExperienceMode;
+  wineLevel: number;
+  isSippingWine: boolean;
+  wineGlassHeld: boolean;
   fps: number;
   faceVisible: boolean;
   handVisible: boolean;
@@ -37,11 +41,17 @@ export interface RuntimeDebugState {
   gpuAccelerated: boolean;
   particleQuality: "HIGH" | "MEDIUM" | "LOW";
   toggleDebug: () => void;
-  updateRuntime: (patch: Partial<Omit<RuntimeDebugState, "toggleDebug" | "updateRuntime">>) => void;
+  setExperienceMode: (mode: ActiveExperienceMode) => void;
+  refillWine: () => void;
+  updateRuntime: (patch: Partial<Omit<RuntimeDebugState, "toggleDebug" | "updateRuntime" | "setExperienceMode" | "refillWine">>) => void;
 }
 
 export const useInteractionStore = create<RuntimeDebugState>((set) => ({
   debugMode: false,
+  experienceMode: "CIGARETTE",
+  wineLevel: 1,
+  isSippingWine: false,
+  wineGlassHeld: false,
   fps: 0,
   faceVisible: false,
   handVisible: false,
@@ -76,5 +86,8 @@ export const useInteractionStore = create<RuntimeDebugState>((set) => ({
   gpuAccelerated: false,
   particleQuality: "HIGH",
   toggleDebug: () => set((state) => ({ debugMode: !state.debugMode })),
+  setExperienceMode: (mode) => set({ experienceMode: mode }),
+  refillWine: () => set({ wineLevel: 1 }),
   updateRuntime: (patch) => set(patch),
 }));
+

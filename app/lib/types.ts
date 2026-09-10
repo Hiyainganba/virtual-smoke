@@ -56,6 +56,10 @@ export interface HandAnalysis {
   gripPoint: Point3;
   indexTip: Point3;
   middleTip: Point3;
+  fingerDirection: Point3;
+  palmCenter: Point3;
+  wrist: Point3;
+  handAngle: number;
 }
 
 export interface TrackingFrame {
@@ -70,6 +74,20 @@ export interface TrackingFrame {
   handRevision: number;
   faceRevision: number;
   updatedTask: "HAND" | "FACE";
+}
+
+export type ActiveExperienceMode = "CIGARETTE" | "WINE";
+
+export interface WineSnapshot {
+  glassPosition: Point3;
+  glassRotation: number;
+  glassScale: number;
+  wineLevel: number;
+  isHeld: boolean;
+  isSipping: boolean;
+  sloshOffset: number;
+  handGripType: "STEM" | "BOWL" | "NONE";
+  glassVisible: boolean;
 }
 
 export interface InteractionSnapshot {
@@ -89,6 +107,7 @@ export interface InteractionSnapshot {
   faceVisible: boolean;
   handVisible: boolean;
   delegate: "GPU" | "CPU";
+  handSmokeActive?: boolean;
 }
 
 export type SmokeEmission =

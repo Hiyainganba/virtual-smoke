@@ -39,10 +39,17 @@ export function DebugOverlay() {
         <dt>BURSTS M/N</dt><dd>{state.mouthBurstCount} / {state.noseBurstCount}</dd>
         <dt>TIP SMOKE</dt><dd>{state.baseSmokeParticles}</dd>
         <dt>GPU POINTS</dt><dd>{state.particleDrawCount}</dd>
-        <dt>PINCH</dt><dd>{metric(state.pinchDistance)}</dd>
         <dt>PARTICLES</dt><dd>{state.particleQuality}</dd>
+        <dt>ITEM MODE</dt><dd>{state.experienceMode}</dd>
+        {state.experienceMode === "WINE" && (
+          <>
+            <dt>WINE GLASS</dt><dd>{state.wineGlassHeld ? "HELD" : "FLOATING"}</dd>
+            <dt>WINE LEVEL</dt><dd>{Math.round(state.wineLevel * 100)}%</dd>
+            <dt>SIPPING WINE</dt><dd>{state.isSippingWine ? "YES" : "NO"}</dd>
+          </>
+        )}
       </dl>
-      <p>Press D to close</p>
+      <p>D: Debug | C: Cigarette | W: Wine | R: Refill</p>
     </aside>
   );
 }
