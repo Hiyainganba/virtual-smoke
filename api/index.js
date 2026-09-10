@@ -39,7 +39,8 @@ export default async function handler(req, res) {
       if (ext === ".wasm" || ext === ".task" || pathname.startsWith("/_next/static/")) {
         res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
       }
-      return fs.createReadStream(filePathToServe).pipe(res);
+      const fileBuffer = await fs.promises.readFile(filePathToServe);
+      return res.end(fileBuffer);
     }
 
     if (!workerModule) {
@@ -57,7 +58,14 @@ export default async function handler(req, res) {
       headers,
     });
 
-    const response = await worker.fetch(webReq, process.env, {
+    const env = {
+      ...process.env,
+      ASSETS: {
+        fetch: async () => new Response("Not found", { status: 404 }),
+      },
+    };
+
+    const response = await worker.fetch(webReq, env, {
       waitUntil() {},
       passThroughOnException() {},
     });
